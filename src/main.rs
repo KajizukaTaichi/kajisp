@@ -1,10 +1,24 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    process::exit,
+};
 
 fn main() {
     println!("Kajisp - simple Lisp dialects\n(c) 2024 梶塚太智. All rights reserved");
-    let program = input("> ");
-    let program = parse(program);
-    println!("{:?}", execute(program));
+    loop {
+        let mut code = String::new();
+        loop {
+            let enter = input("> ");
+            code += &format!("{enter}\n");
+            if enter.is_empty() {
+                break;
+            }
+        }
+        if !code.trim().is_empty() {
+            let program = parse(code);
+            println!("{}", execute(program).get_symbol().trim());
+        }
+    }
 }
 
 fn input(prompt: &str) -> String {
@@ -94,6 +108,7 @@ fn execute(program: SExpression) -> Type {
                 }
                 sum
             }),
+            "exit" => exit(0),
             _ => panic!("美大落ちチョビ髭「チクショーメー」"),
         }
     } else {
@@ -102,11 +117,11 @@ fn execute(program: SExpression) -> Type {
 }
 
 fn parse(source: String) -> SExpression {
-    let chars: Vec<char> = source.chars().collect();
+    let chars: Vec<char> = source.trim().chars().collect();
     if chars[0] == '(' && chars[chars.len() - 1] == ')' {
         let inner_list = String::from_iter(chars[1..chars.len() - 1].iter());
         SExpression::List(
-            tokenize(&inner_list)
+            tokenize(inner_list)
                 .iter()
                 .map(|x| parse(x.clone()))
                 .collect::<Vec<SExpression>>(),
@@ -125,7 +140,7 @@ fn parse(source: String) -> SExpression {
     }
 }
 
-fn tokenize(input: &str) -> Vec<String> {
+fn tokenize(input: String) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current_token = String::new();
     let mut in_parentheses = false;
@@ -154,7 +169,7 @@ fn tokenize(input: &str) -> Vec<String> {
                     current_token.push(c);
                 }
             }
-            ' ' => {
+            ' ' | '\n' | '\t' | '\r' | '　' => {
                 if in_parentheses {
                     current_token.push(c);
                 } else {
