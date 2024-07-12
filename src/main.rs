@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 fn main() {
-    println!("Kajisp - Lisp original dialects\n(c) 2024 梶塚太智. All rights reserved");
+    println!("Kajisp - simple Lisp dialects\n(c) 2024 梶塚太智. All rights reserved");
     let program = input("> ");
     let program = parse(program);
     println!("{:?}", execute(program));
