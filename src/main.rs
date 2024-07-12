@@ -1,10 +1,13 @@
 use std::{
+    collections::HashMap,
     io::{self, Write},
     process::exit,
 };
 
 fn main() {
     println!("Kajisp - simple Lisp dialects\n(c) 2024 梶塚太智. All rights reserved");
+
+    let mut scope = HashMap::new();
     loop {
         let mut code = String::new();
         loop {
@@ -16,7 +19,9 @@ fn main() {
         }
         if !code.trim().is_empty() {
             let program = parse(code);
-            println!("{}", execute(program).get_symbol().trim());
+            for result in run(program, &mut scope) {
+                println!("{}", result.get_symbol().trim());
+            }
         }
     }
 }
@@ -114,9 +119,20 @@ impl SExpression {
     }
 }
 
-fn execute(program: SExpression) -> SExpression {
+fn run(programs: Vec<SExpression>, scope: &mut HashMap<String, SExpression>) -> Vec<SExpression> {
+    let mut result: Vec<SExpression> = vec![];
+    for program in programs {
+        result.push(execute(program, scope));
+    }
+    result
+}
+
+fn execute(program: SExpression, grobal_scope: &mut HashMap<String, SExpression>) -> SExpression {
     if let SExpression::List(list) = program {
-        let list: Vec<SExpression> = list.iter().map(|i| execute(i.clone())).collect();
+        let list: Vec<SExpression> = list
+            .iter()
+            .map(|i| execute(i.clone(), &mut grobal_scope.to_owned()))
+            .collect();
         let function: SExpression = if let Some(i) = list.get(0) {
             i.clone()
         } else {
@@ -235,13 +251,28 @@ fn execute(program: SExpression) -> SExpression {
                     .expect("The paramater is deficiency")
                     .get_string(),
             )),
-            "eval" => execute({
-                let params = params
+            "eval" => execute(
+                {
+                    let params = params
+                        .get(0)
+                        .expect("The paramater is deficiency")
+                        .get_list();
+                    SExpression::List(params[1..params.len()].to_vec())
+                },
+                &mut grobal_scope.to_owned(),
+            ),
+            "def" => {
+                let name = params
                     .get(0)
                     .expect("The paramater is deficiency")
-                    .get_list();
-                SExpression::List(params[1..params.len()].to_vec())
-            }),
+                    .get_string();
+                let value = params.get(1).expect("The paramater is deficiency");
+                grobal_scope
+                    .entry(name.clone())
+                    .and_modify(|data| *data = value.clone())
+                    .or_insert(value.clone());
+                SExpression::Nil
+            }
             "if" => {
                 let condition = params
                     .get(0)
@@ -254,46 +285,64 @@ fn execute(program: SExpression) -> SExpression {
                 }
                 .expect("The paramater is deficiency");
                 if let SExpression::List(list) = params {
-                    execute(SExpression::List(list[1..list.len()].to_vec()))
+                    execute(
+                        SExpression::List(list[1..list.len()].to_vec()),
+                        &mut grobal_scope.to_owned(),
+                    )
                 } else {
                     params.clone()
                 }
             }
-            "symbol" => SExpression::List(
-                [vec![SExpression::Symbol("symbol".to_string())], params].concat(),
-            ),
+            "data" => {
+                SExpression::List([vec![SExpression::Symbol("data".to_string())], params].concat())
+            }
             "exit" => exit(0),
-            _ => panic!("This function is undefined"),
+            identify => {
+                if let Some(data) = grobal_scope.get(&identify.to_string()) {
+                    return data.clone();
+                } else {
+                    panic!("This function is undefined: '{identify}'")
+                }
+            }
         }
     } else {
         return program;
     }
 }
 
-fn parse(source: String) -> SExpression {
-    let chars: Vec<char> = source.trim().chars().collect();
-    if chars[0] == '(' && chars[chars.len() - 1] == ')' {
-        let inner_list = String::from_iter(chars[1..chars.len() - 1].iter());
-        SExpression::List(
-            tokenize(inner_list)
-                .iter()
-                .map(|x| parse(x.clone()))
-                .collect::<Vec<SExpression>>(),
-        )
-    } else if chars[0] == '"' && chars[chars.len() - 1] == '"' {
-        let inner_string: String = String::from_iter(chars[1..chars.len() - 1].iter());
-        SExpression::String(inner_string)
-    } else {
-        if let Ok(i) = source.parse::<f64>() {
-            SExpression::Number(i)
-        } else if let Ok(b) = source.parse::<bool>() {
-            SExpression::Bool(b)
-        } else if source == "nil" {
-            SExpression::Nil
-        } else {
-            SExpression::Symbol(source)
-        }
+fn parse(source: String) -> Vec<SExpression> {
+    let mut programs: Vec<SExpression> = Vec::new();
+    for source in tokenize(source) {
+        programs.push({
+            let chars: Vec<char> = source.trim().chars().collect();
+            if chars[0] == '(' && chars[chars.len() - 1] == ')' {
+                let inner_list = String::from_iter(chars[1..chars.len() - 1].iter());
+                SExpression::List({
+                    let mut tokens: Vec<SExpression> = vec![];
+                    for token in tokenize(inner_list).iter() {
+                        for i in parse(token.clone()) {
+                            tokens.push(i);
+                        }
+                    }
+                    tokens
+                })
+            } else if chars[0] == '"' && chars[chars.len() - 1] == '"' {
+                let inner_string: String = String::from_iter(chars[1..chars.len() - 1].iter());
+                SExpression::String(inner_string)
+            } else {
+                if let Ok(i) = source.parse::<f64>() {
+                    SExpression::Number(i)
+                } else if let Ok(b) = source.parse::<bool>() {
+                    SExpression::Bool(b)
+                } else if source == "nil" {
+                    SExpression::Nil
+                } else {
+                    SExpression::Symbol(source)
+                }
+            }
+        });
     }
+    programs
 }
 
 fn tokenize(input: String) -> Vec<String> {
