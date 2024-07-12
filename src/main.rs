@@ -5,7 +5,7 @@ use std::{
 };
 
 fn main() {
-    println!("Kajisp - simple Lisp dialects\n(c) 2024 梶塚太智. All rights reserved");
+    println!("Kajisp - Simple, easy to understand, high-performance and safe LISP dialect\n(c) 2024 梶塚太智. All rights reserved");
 
     let mut scope = HashMap::new();
     loop {
