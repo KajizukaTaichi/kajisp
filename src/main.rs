@@ -38,6 +38,7 @@ enum SExpression {
 #[derive(Clone, Debug)]
 enum Type {
     Number(f64),
+    Bool(bool),
     Symbol(String),
     String(String),
     Nil,
@@ -47,6 +48,13 @@ impl Type {
     fn get_number(&self) -> f64 {
         match self {
             Type::Number(i) => *i,
+            Type::Bool(b) => {
+                if *b {
+                    1f64
+                } else {
+                    0f64
+                }
+            }
             Type::Symbol(s) => s.parse().unwrap_or(0f64),
             Type::String(s) => s.parse().unwrap_or(0f64),
             Type::Nil => 0f64,
@@ -56,6 +64,7 @@ impl Type {
     fn get_symbol(&self) -> String {
         match self {
             Type::Number(i) => i.to_string(),
+            Type::Bool(b) => b.to_string(),
             Type::Symbol(s) => s.to_string(),
             Type::String(s) => format!("\"{s}\""),
             Type::Nil => "nil".to_string(),
@@ -65,9 +74,20 @@ impl Type {
     fn get_string(&self) -> String {
         match self {
             Type::Number(i) => i.to_string(),
+            Type::Bool(b) => b.to_string(),
             Type::Symbol(s) => s.to_string(),
             Type::String(s) => s.to_string(),
             Type::Nil => String::new(),
+        }
+    }
+
+    fn get_bool(&self) -> bool {
+        match self {
+            Type::Number(i) => *i != 0f64,
+            Type::Bool(b) => *b,
+            Type::Symbol(s) => !s.is_empty(),
+            Type::String(s) => !s.is_empty(),
+            Type::Nil => false,
         }
     }
 }
@@ -77,14 +97,14 @@ fn execute(program: SExpression) -> Type {
         return value;
     } else if let SExpression::List(list) = program {
         let list: Vec<Type> = list.iter().map(|i| execute(i.clone())).collect();
-        let command: Type = if let Some(i) = list.get(0) {
+        let function: Type = if let Some(i) = list.get(0) {
             i.clone()
         } else {
             return Type::Nil;
         };
         let params: Vec<Type> = list[1..list.len()].to_vec();
 
-        match command.get_symbol().as_str() {
+        match function.get_symbol().as_str() {
             "+" => Type::Number({
                 let params: Vec<f64> = params.iter().map(|i| i.get_number()).collect();
 
@@ -97,7 +117,7 @@ fn execute(program: SExpression) -> Type {
             "-" => Type::Number({
                 let params: Vec<f64> = params.iter().map(|i| i.get_number()).collect();
 
-                let mut result: f64 = *params.get(1).expect("The paramater is deficiency");
+                let mut result: f64 = *params.get(0).expect("The paramater is deficiency");
                 for i in params[1..params.len()].to_vec().iter() {
                     result -= i;
                 }
@@ -106,7 +126,7 @@ fn execute(program: SExpression) -> Type {
             "*" => Type::Number({
                 let params: Vec<f64> = params.iter().map(|i| i.get_number()).collect();
 
-                let mut result: f64 = *params.get(1).expect("The paramater is deficiency");
+                let mut result: f64 = *params.get(0).expect("The paramater is deficiency");
                 for i in params[1..params.len()].to_vec().iter() {
                     result *= i;
                 }
@@ -115,7 +135,7 @@ fn execute(program: SExpression) -> Type {
             "/" => Type::Number({
                 let params: Vec<f64> = params.iter().map(|i| i.get_number()).collect();
 
-                let mut result: f64 = *params.get(1).expect("The paramater is deficiency");
+                let mut result: f64 = *params.get(0).expect("The paramater is deficiency");
                 for i in params[1..params.len()].to_vec().iter() {
                     result /= i;
                 }
@@ -124,18 +144,56 @@ fn execute(program: SExpression) -> Type {
             "%" => Type::Number({
                 let params: Vec<f64> = params.iter().map(|i| i.get_number()).collect();
 
-                let mut result: f64 = *params.get(1).expect("The paramater is deficiency");
+                let mut result: f64 = *params.get(0).expect("The paramater is deficiency");
                 for i in params[1..params.len()].to_vec().iter() {
                     result %= i;
                 }
                 result
+            }),
+            "=" => Type::Bool({
+                let params: Vec<String> = params.iter().map(|i| i.get_symbol()).collect();
+
+                match params.first() {
+                    Some(first) => params.iter().all(|x| x == first),
+                    None => true, // ベクタが空の場合はtrueとする
+                }
+            }),
+            ">" => Type::Bool({
+                let params: Vec<String> = params.iter().map(|i| i.get_symbol()).collect();
+                params.windows(2).all(|window| window[0] > window[1])
+            }),
+            ">=" => Type::Bool({
+                let params: Vec<String> = params.iter().map(|i| i.get_symbol()).collect();
+                params.windows(2).all(|window| window[0] >= window[1])
+            }),
+            "<" => Type::Bool({
+                let params: Vec<String> = params.iter().map(|i| i.get_symbol()).collect();
+                params.windows(2).all(|window| window[0] < window[1])
+            }),
+            "<=" => Type::Bool({
+                let params: Vec<String> = params.iter().map(|i| i.get_symbol()).collect();
+                params.windows(2).all(|window| window[0] <= window[1])
+            }),
+            "&" => Type::Bool({
+                let params: Vec<bool> = params.iter().map(|i| i.get_bool()).collect();
+                params.iter().all(|&x| x)
+            }),
+            "|" => Type::Bool({
+                let params: Vec<bool> = params.iter().map(|i| i.get_bool()).collect();
+                params.iter().any(|&x| x)
+            }),
+            "!" => Type::Bool({
+                !params
+                    .get(0)
+                    .expect("The paramater is deficiency")
+                    .get_bool()
             }),
             "concat" => Type::String(params.iter().map(|i| i.get_string()).collect()),
             "println" => {
                 println!(
                     "{}",
                     params
-                        .get(1)
+                        .get(0)
                         .expect("The paramater is deficiency")
                         .get_string()
                 );
@@ -145,7 +203,7 @@ fn execute(program: SExpression) -> Type {
                 print!(
                     "{}",
                     params
-                        .get(1)
+                        .get(0)
                         .expect("The paramater is deficiency")
                         .get_string()
                 );
@@ -153,12 +211,24 @@ fn execute(program: SExpression) -> Type {
             }
             "eval" => execute(parse(
                 params
-                    .get(1)
+                    .get(0)
                     .expect("The paramater is deficiency")
                     .get_string(),
             )),
+            "if" => {
+                let condition = params
+                    .get(0)
+                    .expect("The paramater is deficiency")
+                    .get_bool();
+                if condition {
+                    params.get(1).expect("The paramater is deficiency").clone()
+                } else {
+                    params.get(2).expect("The paramater is deficiency").clone()
+                }
+            }
+
             "exit" => exit(0),
-            _ => panic!("美大落ちチョビ髭「チクショーメー」"),
+            _ => panic!("This function is undefined"),
         }
     } else {
         return Type::Nil;
@@ -179,15 +249,14 @@ fn parse(source: String) -> SExpression {
         let inner_string: String = String::from_iter(chars[1..chars.len() - 1].iter());
         SExpression::Atom(Type::String(inner_string))
     } else {
-        let value = source.parse::<f64>();
-        SExpression::Atom(if let Ok(i) = value {
+        SExpression::Atom(if let Ok(i) = source.parse::<f64>() {
             Type::Number(i)
+        } else if let Ok(b) = source.parse::<bool>() {
+            Type::Bool(b)
+        } else if source == "nil" {
+            Type::Nil
         } else {
-            if source == "nil" {
-                Type::Nil
-            } else {
-                Type::Symbol(source)
-            }
+            Type::Symbol(source)
         })
     }
 }
